@@ -1,0 +1,236 @@
+{
+  "name": "enterprise-agent-toolkit",
+  "displayName": "Enterprise Agent Toolkit",
+  "description": "Policy diagnostics, quick fixes, local runtime controls and AI-assistant standards for agents built on the Enterprise Agent SDK.",
+  "version": "0.1.0",
+  "publisher": "enterprise",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.137.0"
+  },
+  "categories": [
+    "Linters",
+    "Snippets",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "workspaceContains:agent.yaml",
+    "workspaceContains:**/agent.yaml",
+    "onLanguage:python",
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "ent.newAgent",
+        "title": "New Agent",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.checkWorkspace",
+        "title": "Check Workspace",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.checkFile",
+        "title": "Run Enterprise Checks",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.startStack",
+        "title": "Start Local Stack",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.stopStack",
+        "title": "Stop Local Stack",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.openFlociUi",
+        "title": "Open Floci UI",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.openJaeger",
+        "title": "Open Jaeger Trace Viewer",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.showHealth",
+        "title": "Show Local Stack Health",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.invokePanel",
+        "title": "Invoke and Test Agent",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.installMcpConfig",
+        "title": "Install MCP Standards Server Config (.vscode/mcp.json)",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.installAssistantInstructions",
+        "title": "Install AI Assistant Instructions",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.checkUpgrade",
+        "title": "Check for SDK Upgrade",
+        "category": "Enterprise Agent"
+      },
+      {
+        "command": "ent.checkExtensionUpdate",
+        "title": "Check for Extension Update",
+        "category": "Enterprise Agent"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "ent.checkFile",
+          "when": "resourceLangId == python || resourceFilename == agent.yaml || resourceFilename == pyproject.toml"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ent.checkFile",
+          "when": "resourceLangId == python || resourceFilename == agent.yaml || resourceFilename == pyproject.toml",
+          "group": "navigation@99"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "ent.invokePanel",
+          "when": "resourceFilename == agent.yaml",
+          "group": "navigation@99"
+        }
+      ]
+    },
+    "snippets": [
+      {
+        "language": "python",
+        "path": "./snippets/python.json"
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "ent.standards",
+        "label": "Enterprise Agent Standards"
+      }
+    ],
+    "configuration": {
+      "title": "Enterprise Agent Toolkit",
+      "properties": {
+        "ent.agentCommand": {
+          "type": "string",
+          "default": "ent-agent",
+          "description": "Command that runs the ent-agent CLI. If it cannot be started, 'uv run ent-agent' is tried."
+        },
+        "ent.platformDir": {
+          "type": "string",
+          "default": "",
+          "description": "Path of the Platform2.0 checkout (contains harness/dev.ps1, policy/). Empty: first workspace folder containing harness/dev.ps1."
+        },
+        "ent.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run policy checks on open and save."
+        },
+        "ent.diagnostics.timeoutMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "Timeout for one check process."
+        },
+        "ent.rulesDocUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of the rules document; the rule anchor (#ent-001) is appended. Empty: use <platformDir>/policy/docs/rules.md."
+        },
+        "ent.runtime.statusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show local stack health in the status bar (polls every 10 s)."
+        },
+        "ent.runtime.agentUrls": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "http://localhost:8080",
+            "http://localhost:8081"
+          ],
+          "description": "Local agents to health-check (GET /ping)."
+        },
+        "ent.runtime.flociUrl": {
+          "type": "string",
+          "default": "http://localhost:4566"
+        },
+        "ent.runtime.flociUiUrl": {
+          "type": "string",
+          "default": "http://localhost:4500"
+        },
+        "ent.runtime.jaegerUrl": {
+          "type": "string",
+          "default": "http://localhost:16686"
+        },
+        "ent.runtime.modelRouterUrl": {
+          "type": "string",
+          "default": "http://localhost:8788"
+        },
+        "ent.runtime.invokeRouterUrl": {
+          "type": "string",
+          "default": "http://localhost:4567"
+        },
+        "ent.runtime.mode": {
+          "type": "string",
+          "enum": [
+            "replay",
+            "live"
+          ],
+          "default": "replay",
+          "description": "Mode passed to 'dev.ps1 up -Mode'."
+        },
+        "ent.latestSdkVersion": {
+          "type": "string",
+          "default": "",
+          "description": "Latest approved ent-agent-sdk version (overrides policy/data/versions.json)."
+        },
+        "ent.updateFeedUrl": {
+          "type": "string",
+          "default": "",
+          "description": "http(s) URL or file path of the extension update feed (updates.json)."
+        },
+        "ent.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt in to anonymous usage telemetry (feature names and rule IDs only; never code, paths or prompts)."
+        },
+        "ent.telemetry.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Optional URL that receives telemetry events by POST. Events are always also written to a local NDJSON file."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "sync-standards": "node scripts/sync-standards.mjs",
+    "test": "npm run compile && node --test \"out/core/tests/*.test.js\"",
+    "prepackage": "node -e \"require('fs').mkdirSync('dist',{recursive:true})\"",
+    "package": "npm run compile && vsce package --no-dependencies --allow-missing-repository --skip-license --out dist/",
+    "publish:private": "powershell -NoProfile -File scripts/publish-private.ps1"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "@types/vscode": "1.137.0",
+    "@vscode/vsce": "4.0.0",
+    "typescript": "7.0.2"
+  }
+}

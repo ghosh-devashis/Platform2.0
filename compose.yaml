@@ -1,0 +1,109 @@
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: floci
+    ports:
+      - "4566:4566"
+    environment:
+      # Floci's default is to keep everything in memory, so stored provider keys, secrets and AgentCore runtimes
+      # vanished whenever the container restarted (even a PC reboot). Persistent mode + a named volume keeps them
+      # across restarts and "dev.ps1 down"; only "down -Wipe" (down -v) deletes them. (Tested for secrets.)
+      FLOCI_STORAGE_MODE: persistent
+    volumes:
+      - floci-data:/app/data
+    restart: unless-stopped
+
+  floci-ui:
+    image: floci/floci-ui:latest
+    container_name: floci-ui
+    ports:
+      - "4500:4500"
+    environment:
+      PORT: "4500"
+      FLOCI_ENDPOINT: "http://floci:4566"
+      AWS_REGION: "us-east-1"
+      AWS_ACCESS_KEY_ID: "test"
+      AWS_SECRET_ACCESS_KEY: "test"
+    depends_on:
+      - floci
+    restart: unless-stopped
+
+  # LLM gateway (open-source Portkey). All agent LLM calls go through here (via the model router).
+  # Pinned version (spec GW / risks: pin gateway versions). Console: http://localhost:8787/public/
+  portkey:
+    image: portkeyai/gateway:1.15.2
+    container_name: portkey
+    ports:
+      - "8787:8787"
+    restart: unless-stopped
+
+  # Trace viewer (RUN-07). Agents send OpenTelemetry traces here over OTLP/HTTP (:4318).
+  # UI: http://localhost:16686. In-memory storage: traces are lost when the container restarts.
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    container_name: jaeger
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    restart: unless-stopped
+
+  # ---- Application layer (profile "app"): built from this repo. Start with:
+  #        docker compose --profile app up -d --build
+  #      Agents are not part of this stack: create each in its own folder (instructions.txt) and run it on the host
+  #      or in its own container; the routers below are what they talk to.
+  #      Replay mode with no provider keys (CI):   ROUTER_MODE=replay ROUTER_REPLAY_MISSING=error  (see compose.ci.yaml)
+
+  # Model router: approved model registry + provider keys (from Secrets Manager) in front of Portkey.
+  model-router:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: harness/model-router/Dockerfile
+    container_name: model-router
+    ports:
+      - "8788:8788"
+    environment:
+      ROUTER_MODE: ${ROUTER_MODE:-real}              # real | record | replay | local
+      ROUTER_REPLAY_MISSING: ${ROUTER_REPLAY_MISSING:-stub}
+      PORTKEY_URL: http://portkey:8787/v1
+      PORTKEY_URLS: ${PORTKEY_URLS:-}                    # a,b,... several gateway instances: round-robin with failover (GW-10)
+      # Each agent/team has its own gateway credential: provider keys never leave the router (local dev values).
+      # Add yours before "up" (name=key pairs, comma separated), then give the agent the key as ENT_MODEL_GATEWAY_KEY:
+      #   $env:ROUTER_GATEWAY_KEYS = "platform-tests=dev-key-platform-tests,my-agent=dev-key-my-agent"
+      ROUTER_GATEWAY_KEYS: ${ROUTER_GATEWAY_KEYS:-platform-tests=dev-key-platform-tests}
+      ROUTER_RATE_LIMIT_RPM: ${ROUTER_RATE_LIMIT_RPM:-0}              # requests per minute per client (0 = off)
+      ROUTER_TOKEN_BUDGET_PER_DAY: ${ROUTER_TOKEN_BUDGET_PER_DAY:-0}  # tokens per client per UTC day (0 = off)
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local
+      AWS_ENDPOINT_URL: http://floci:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ${ENT_RECORDINGS_DIR:-./harness/model-router/recordings}:/app/recordings
+    depends_on:
+      - portkey
+      - floci
+    restart: unless-stopped
+
+  # Local invoke router: InvokeAgentRuntime -> the agent containers; everything else -> Floci. Point the
+  # bedrock-agentcore client's endpoint_url at http://localhost:4567.
+  invoke-router:
+    profiles: ["app"]
+    build:
+      context: .
+      dockerfile: harness/invoke-router/Dockerfile
+    container_name: invoke-router
+    ports:
+      - "4567:4567"
+    environment:
+      FLOCI_URL: http://floci:4566
+      # runtime_name=url pairs for agents that should answer InvokeAgentRuntime calls; empty by default, for example:
+      #   $env:INVOKE_ROUTER_AGENTS = "my_agent=http://host.docker.internal:8091"   (an agent running on the host)
+      INVOKE_ROUTER_AGENTS: ${INVOKE_ROUTER_AGENTS:-}
+    depends_on:
+      - floci
+    restart: unless-stopped
+
+volumes:
+  floci-data:

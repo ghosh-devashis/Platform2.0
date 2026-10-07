@@ -1,0 +1,11 @@
+# Fast policy checks before every commit (POL-13): the same rules CI enforces. Install: pre-commit install
+# (Needs a bash shell: Git Bash on Windows, or run .\policy\run-checks.ps1 -Fast yourself.)
+repos:
+  - repo: local
+    hooks:
+      - id: ent-policy-fast
+        name: Enterprise policy checks (fast)
+        entry: bash policy/run-checks.sh --fast examples
+        language: system
+        pass_filenames: false
+        always_run: true

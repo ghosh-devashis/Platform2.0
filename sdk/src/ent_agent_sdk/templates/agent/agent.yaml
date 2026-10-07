@@ -1,0 +1,11 @@
+# Agent manifest. Validated in your editor, by pre-commit and by CI (ent-agent manifest validate).
+name: __NAME__
+team: __TEAM__
+data_classification: __CLASSIFICATION__   # public | internal | confidential | restricted
+guardrail_profile: __PROFILE__            # standard | strict (restricted data requires strict)
+description: Describe what __NAME__ does.
+models:
+  - chat-default                          # logical names from the approved model registry
+tools:
+  - echo                                  # every tool must be registered with @tools.tool
+secrets: []                               # secrets read with secrets.get(), e.g. crm/api

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "ent-agent-standards": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "ent-agent", "mcp"]
+    }
+  }
+}

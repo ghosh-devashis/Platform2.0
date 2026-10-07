@@ -1,0 +1,31 @@
+{
+  "key": "0ae8a1e99a0ade88820bcda0206a965ac7052dbd70b644c8b946dc8de0eddd8c",
+  "model": "chat-default",
+  "recorded_at": 1791290805,
+  "response": {
+    "id": "msg_011Cfm1PsbwHthNMcRmq7HBB",
+    "object": "chat.completion",
+    "created": 1791290805,
+    "model": "claude-opus-5-5",
+    "provider": "anthropic",
+    "choices": [
+      {
+        "message": {
+          "role": "assistant",
+          "content": "Hello there, friend!"
+        },
+        "index": 0,
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 409,
+      "completion_tokens": 10,
+      "total_tokens": 419,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  }
+}

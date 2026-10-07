@@ -1,0 +1,25 @@
+# Runs __NAME__ next to the platform's local stack (Floci, Jaeger, Portkey, model router, invoke router).
+# Set PLATFORM_DIR to your checkout of the platform repo (default: ../Platform2.0).
+#   docker compose --profile app up -d --build
+include:
+  - ${PLATFORM_DIR:-../Platform2.0}/compose.yaml
+
+services:
+  agent:
+    build:
+      context: .
+      args:
+        ENT_GIT_SHA: ${ENT_GIT_SHA:-local}
+    ports:
+      - "8080:8080"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local
+      ENT_MODEL_GATEWAY_URL: http://model-router:8788/v1
+      AWS_ENDPOINT_URL: http://floci:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    depends_on:
+      - model-router
+    profiles: ["app"]

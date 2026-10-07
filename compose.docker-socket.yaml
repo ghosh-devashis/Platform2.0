@@ -1,0 +1,13 @@
+# OPT-IN: give Floci access to the Docker socket (RUN-10).
+#
+# Some Floci features need to start containers: its built-in web UI (/_floci/ui) and Lambda. Mounting the Docker socket
+# gives the container control of your Docker host, which is effectively root on your machine. It is OFF by default (the
+# separate floci-ui container exists precisely so you don't need this). Use it only on a development machine, only for
+# the time you need it, never in CI or shared environments. See docs/docker-socket-mode.md.
+#
+#   docker compose -f compose.yaml -f compose.docker-socket.yaml up -d floci
+#   (go back:)  docker compose up -d --force-recreate floci
+services:
+  floci:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

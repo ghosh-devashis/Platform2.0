@@ -1,0 +1,25 @@
+# uv workspace root: one lockfile and one virtual environment for the SDK and the harness (model router, invoke router).
+# Agents are NOT part of this workspace: create each one in its own folder with `uv run ent-agent new` (see instructions.txt).
+[project]
+name = "platform2-workspace"
+version = "0.0.0"
+requires-python = ">=3.11"
+# Members listed here so a plain `uv sync` installs them all.
+dependencies = ["ent-agent-sdk", "model-router", "invoke-router"]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+ent-agent-sdk = { workspace = true }
+model-router = { workspace = true }
+invoke-router = { workspace = true }
+
+[tool.uv.workspace]
+members = ["sdk", "harness/model-router", "harness/invoke-router"]
+
+[tool.pytest.ini_options]
+testpaths = ["sdk/tests", "harness", "policy"]

@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node (VS Code extension)
+node_modules/
+out/
+*.vsix
+
+# Secrets and local config — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# Office files and their lock/temp files (the planning workbook stays on disk only)
+*.xlsx
+*.xls
+~$*
+
+# Terraform (deploy/): provider cache, state and variable files must never be committed
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log

@@ -1,0 +1,8 @@
+# CI override (RUN-06, RUN-09): LLM answers come from recordings only, so tests are deterministic and need no
+# provider keys, cost or internet. A request with no recording fails loudly instead of getting a stub.
+#   docker compose -f compose.yaml -f compose.ci.yaml --profile app up -d --build
+services:
+  model-router:
+    environment:
+      ROUTER_MODE: replay
+      ROUTER_REPLAY_MISSING: error

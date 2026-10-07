@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://platform2.example/schemas/agent.schema.json",
+  "title": "Enterprise agent manifest (agent.yaml)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "team", "data_classification"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,47}$", "description": "Agent name: lowercase letters, digits, hyphens."},
+    "team": {"type": "string", "minLength": 1, "description": "Owning team."},
+    "data_classification": {"enum": ["public", "internal", "confidential", "restricted"]},
+    "guardrail_profile": {"enum": ["standard", "strict"], "description": "Restricted data requires strict."},
+    "description": {"type": "string"},
+    "models": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "description": "Logical model names from the approved registry."},
+    "tools": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "description": "Registered tool names."},
+    "secrets": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true, "description": "Secrets read via secrets.get()."},
+    "token_budget": {
+      "type": "object", "additionalProperties": false, "minProperties": 1,
+      "properties": {"soft": {"type": "integer", "minimum": 1}, "hard": {"type": "integer", "minimum": 1}},
+      "description": "Per-invocation token limits: soft warns, hard stops the run (HTTP 429)."
+    },
+    "resources": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "buckets": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,62}$"}},
+        "tables": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "partition_key"],
+          "properties": {"name": {"type": "string"}, "partition_key": {"type": "string"}, "sort_key": {"type": "string"}}}},
+        "memories": {"type": "array", "items": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]{0,47}$"}}
+      },
+      "description": "Local resources to seed (S3 buckets, DynamoDB tables, AgentCore memories)."
+    },
+    "memory": {
+      "type": "object", "additionalProperties": false, "required": ["backend"],
+      "properties": {"backend": {"enum": ["memory", "dynamodb"]}, "table": {"type": "string", "minLength": 1}},
+      "description": "Where session state is stored."
+    }
+  },
+  "if": {"properties": {"data_classification": {"const": "restricted"}}, "required": ["data_classification"]},
+  "then": {"required": ["guardrail_profile"], "properties": {"guardrail_profile": {"const": "strict"}}}
+}

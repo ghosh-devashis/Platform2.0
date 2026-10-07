@@ -1,0 +1,26 @@
+[project]
+name = "__NAME__"
+version = "0.1.0"
+description = "__NAME__ (team: __TEAM__)"
+requires-python = ">=3.11"
+# Depend on the SDK only: it brings the approved LangGraph/LangChain versions. Do not add them yourself.
+# If the SDK comes from an internal package index, point uv at it under [tool.uv] (see your platform team's guide).
+dependencies = ["ent-agent-sdk"]
+
+[project.scripts]
+__NAME__ = "__PACKAGE__.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/__PACKAGE__"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: needs the local runtime (docker compose --profile app up); CI runs these in replay mode"]
+addopts = "-m 'not integration'"

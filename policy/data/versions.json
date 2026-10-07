@@ -1,0 +1,12 @@
+{
+  "_comment": "Supported releases (GOV-01/02). 'version' names a minor series: every patch release of 0.1 shares one support window. Policy: the current series plus the previous one (N-1) are supported; when a new series ships, the previous one gets a sunset date 90 days later. After its sunset date a repo on that series fails CI (ENT-060); within 90 days of it CI warns (ENT-061). Edit this file in the same change that releases a new version.",
+  "deprecation": {"warn_days": 90, "sunset_days_after_successor": 90},
+  "sdk": {
+    "latest": "0.1.0",
+    "supported": [{"version": "0.1.0", "sunset": null}]
+  },
+  "policy_bundle": {
+    "latest": "0.1.0",
+    "supported": [{"version": "0.1.0", "sunset": null}]
+  }
+}

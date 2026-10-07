@@ -1,0 +1,3 @@
+# Let Git normalise line endings, but keep shell scripts with Unix line endings even when checked out on Windows
+* text=auto
+*.sh text eol=lf

@@ -1,0 +1,251 @@
+# Reusable agent pipeline (POL-10): the gates every agent repo must pass before an image is built.
+# Callers use:   uses: <org>/platform2.0/.github/workflows/agent-ci.yml@<release tag or SHA>
+# A meta-check (policy/tools/check_pipeline.py) fails a repo whose CI stops calling this workflow.
+#
+# Gates: policy (secrets, code rules, manifest, dependencies, waivers, pipeline meta-check) -> tests (unit + local
+# runtime in replay mode) -> supply chain (vulnerabilities, SAST, SBOM, licences) -> build (image + metadata).
+# Tool versions marked "pin" install the latest release; pin them (and the action tags) once the platform team
+# has chosen versions. Not yet exercised on GitHub: expect to fix small things on the first real run.
+name: Agent CI (platform pipeline)
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        default: "3.13"
+      agent-dir:
+        description: Directory of the agent project (where agent.yaml and pyproject.toml are)
+        type: string
+        default: "."
+      platform-repository:
+        description: Repository holding the policy bundle and local stack
+        type: string
+        default: "your-org/platform2.0"
+      platform-ref:
+        description: Release tag or SHA of the platform repo (also recorded as the policy version)
+        type: string
+        default: "v0.1.0"
+      publish:
+        description: Push the image to the registry, sign it (cosign) and attach build provenance (set true on the main branch)
+        type: boolean
+        default: false
+      registry:
+        description: Container registry for published images
+        type: string
+        default: "ghcr.io"
+
+permissions:
+  contents: read
+
+env:
+  PLATFORM_DIR: ${{ github.workspace }}/.platform
+
+jobs:
+  policy:
+    name: Policy gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans history
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ inputs.platform-ref }}
+          path: .platform
+      - uses: astral-sh/setup-uv@v5
+      - name: Install the agent (brings the SDK and its YAML tooling)
+        working-directory: ${{ inputs.agent-dir }}
+        run: |
+          uv sync
+          echo "${PWD}/.venv/bin" >> "$GITHUB_PATH"
+      - name: Install policy tools (pin versions)
+        run: |
+          uv tool install semgrep
+          install_release() { # repo, asset-name-template with {v}
+            tag=$(curl -fsSL "https://api.github.com/repos/$1/releases/latest" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+            url="https://github.com/$1/releases/download/${tag}/${2//\{v\}/${tag#v}}"
+            curl -fsSL "$url" | sudo tar -xz -C /usr/local/bin "$3"
+          }
+          install_release open-policy-agent/conftest "conftest_{v}_Linux_x86_64.tar.gz" conftest
+          install_release gitleaks/gitleaks "gitleaks_{v}_linux_x64.tar.gz" gitleaks
+      - name: Run the policy bundle
+        run: bash .platform/policy/run-checks.sh "${{ inputs.agent-dir }}"
+
+  test:
+    name: Tests (unit + local runtime)
+    runs-on: ubuntu-latest
+    needs: policy
+    env:
+      ENT_RECORDINGS_DIR: ${{ github.workspace }}/${{ inputs.agent-dir }}/recordings
+      ROUTER_MODE: replay
+      ROUTER_REPLAY_MISSING: error
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ inputs.platform-ref }}
+          path: .platform
+      - uses: astral-sh/setup-uv@v5
+      - name: Unit tests
+        working-directory: ${{ inputs.agent-dir }}
+        run: |
+          uv sync
+          uv run pytest
+      - name: Start the local runtime (Floci, Portkey, Jaeger, routers, the agent) in replay mode
+        working-directory: ${{ inputs.agent-dir }}
+        run: |
+          docker compose -f compose.yaml -f "$PLATFORM_DIR/compose.ci.yaml" --profile app up -d --build
+          for i in $(seq 1 60); do curl -fsS http://localhost:8080/ping && break || sleep 2; done
+          curl -fsS http://localhost:8080/ping
+      - name: Seed from the manifest
+        working-directory: ${{ inputs.agent-dir }}
+        env:
+          AWS_ENDPOINT_URL: http://localhost:4566
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+        run: uv run ent-agent dev seed
+      - name: Integration tests (against the local runtime)
+        working-directory: ${{ inputs.agent-dir }}
+        env:
+          AGENT_URL: http://localhost:8080
+          INVOKE_ROUTER_URL: http://localhost:4567
+        run: |
+          uv run pytest -m integration -o addopts="" || [ $? -eq 5 ] # 5 = no integration tests yet
+      - name: Evaluation gate (golden questions, minimum scores; POL-08)
+        working-directory: ${{ inputs.agent-dir }}
+        run: |
+          if [ -f evals/golden.yaml ]; then
+            uv run ent-agent eval run evals/golden.yaml --url http://localhost:8080 --report eval-report.json
+          else
+            echo "::warning::No evals/golden.yaml: the evaluation gate was skipped. Add golden questions."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: ${{ inputs.agent-dir }}/eval-report.json
+          if-no-files-found: ignore
+      - name: Show logs on failure
+        if: failure()
+        working-directory: ${{ inputs.agent-dir }}
+        run: docker compose -f compose.yaml -f "$PLATFORM_DIR/compose.ci.yaml" --profile app logs --no-color --tail 200
+      - name: Stop the local runtime
+        if: always()
+        working-directory: ${{ inputs.agent-dir }}
+        run: docker compose -f compose.yaml -f "$PLATFORM_DIR/compose.ci.yaml" --profile app down -v
+
+  supply-chain:
+    name: Vulnerabilities, SAST, SBOM, licences
+    runs-on: ubuntu-latest
+    needs: policy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.platform-repository }}
+          ref: ${{ inputs.platform-ref }}
+          path: .platform
+      - uses: astral-sh/setup-uv@v5
+      - name: Install and export locked dependencies
+        working-directory: ${{ inputs.agent-dir }}
+        run: |
+          uv sync
+          uv export --no-dev --no-emit-project --format requirements-txt -o requirements.lock
+      - name: Dependency vulnerabilities (fail on any known vulnerability; triage via waivers)
+        working-directory: ${{ inputs.agent-dir }}
+        run: uvx pip-audit --requirement requirements.lock --no-deps --disable-pip --strict
+      - name: SAST (fail on ERROR findings)
+        working-directory: ${{ inputs.agent-dir }}
+        run: uvx semgrep scan --config p/python --severity ERROR --error --quiet .
+      - name: SBOM (CycloneDX)
+        working-directory: ${{ inputs.agent-dir }}
+        run: uvx --from cyclonedx-bom cyclonedx-py requirements requirements.lock --of JSON -o sbom.cdx.json
+      - name: Licence policy
+        working-directory: ${{ inputs.agent-dir }}
+        run: |
+          uvx pip-licenses --python .venv/bin/python --format=json --output-file licenses-report.json
+          python3 "$PLATFORM_DIR/policy/tools/check_licenses.py" licenses-report.json --policy "$PLATFORM_DIR/policy/licenses.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom-and-licences
+          path: |
+            ${{ inputs.agent-dir }}/sbom.cdx.json
+            ${{ inputs.agent-dir }}/licenses-report.json
+
+  build:
+    name: Build image
+    runs-on: ubuntu-latest
+    needs: [policy, test, supply-chain]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (no push yet)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.agent-dir }}
+          load: true
+          tags: agent:${{ github.sha }}
+          build-args: |
+            ENT_GIT_SHA=${{ github.sha }}
+            ENT_POLICY_VERSION=${{ inputs.platform-ref }}
+      - name: Image reports the SDK and policy versions it was built with (SDK-14)
+        run: docker run --rm "agent:${{ github.sha }}" python -m ent_agent_sdk.metadata read
+
+  publish:
+    name: Publish, sign and attest the image (POL-09)
+    runs-on: ubuntu-latest
+    needs: [policy, test, supply-chain, build]
+    if: inputs.publish
+    # The calling job must grant these permissions too (the template's ci.yml does).
+    permissions:
+      contents: read
+      packages: write
+      id-token: write      # keyless signing with the workflow's identity (Sigstore)
+      attestations: write  # build provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.registry }}/${{ github.repository }}
+          tags: |
+            type=sha
+            type=ref,event=tag
+      - id: push
+        name: Build for amd64 and arm64 and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.agent-dir }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            ENT_GIT_SHA=${{ github.sha }}
+            ENT_POLICY_VERSION=${{ inputs.platform-ref }}
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign the image digest (keyless)
+        env:
+          IMAGE: ${{ inputs.registry }}/${{ github.repository }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+      - name: Attach SLSA build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ inputs.registry }}/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      # Deploy only what passes: policy/tools/verify_image.sh <image@digest> <org/repo>.

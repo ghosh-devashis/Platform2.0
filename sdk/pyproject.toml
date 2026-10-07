@@ -1,0 +1,30 @@
+[project]
+name = "ent-agent-sdk"
+version = "0.1.0"
+description = "Enterprise Agent SDK: the standard way to build LangGraph agents (AgentCore runtime contract, observability, secrets, guardrails)."
+readme = "README.md"
+requires-python = ">=3.11"
+# SDK-02: approved framework versions are pinned here and re-exported to agents.
+# "~=X.Y.Z" allows patch updates only (X.Y.*); moving to a new minor version is a reviewed SDK release.
+dependencies = [
+    "boto3~=1.43.108",
+    "fastapi~=0.142.2",
+    "langchain-core~=1.6.6",
+    "langchain-openai~=1.6.7",
+    "langgraph~=1.2.12",
+    "opentelemetry-api~=1.45.0",
+    "opentelemetry-exporter-otlp-proto-http~=1.45.0",
+    "opentelemetry-sdk~=1.45.0",
+    "pyyaml~=6.0",
+    "uvicorn~=0.54.0",
+]
+
+[project.scripts]
+ent-agent = "ent_agent_sdk.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ent_agent_sdk"]

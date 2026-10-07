@@ -1,0 +1,16 @@
+# Secret scanning (POL-03). Extends gitleaks' default rules; only known dummy placeholders are allowed.
+title = "Enterprise agent secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known dummy values used for local development"
+regexes = [
+  '''dev-placeholder-replace-me''',
+  '''AWS_SECRET_ACCESS_KEY\s*[:=]\s*["']?test["']?''',
+  '''AWS_ACCESS_KEY_ID\s*[:=]\s*["']?test["']?''',
+  # Fake credentials used as detector test fixtures (sdk/tests/test_guardrails.py, test_tools.py)
+  '''AKIAABCDEFGHIJKLMNOP''',
+  '''sk-abcdefghijklmnopqrstuvwxyz''',
+]

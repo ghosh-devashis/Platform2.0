@@ -1,0 +1,7 @@
+{
+  "_comment": "Starter allowlist of extra direct dependencies for agents (owned by platform + security). ent-agent-sdk is required and brings the approved LangGraph/LangChain stack.",
+  "approved_dependencies": [
+    "beautifulsoup4", "httpx", "jinja2", "lxml", "markdown", "numpy", "orjson", "pandas", "psycopg",
+    "pydantic", "pypdf", "python-dateutil", "pyyaml", "requests", "sqlalchemy", "tabulate", "tenacity"
+  ]
+}

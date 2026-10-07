@@ -1,0 +1,22 @@
+# CI is provided by the platform team's reusable pipeline. Do not remove or override its gates:
+# a meta-check fails the build if this file stops calling it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  agent-ci:
+    # Pin to a platform release tag or commit SHA (never a branch). Replace your-org with your GitHub organisation.
+    uses: your-org/platform2.0/.github/workflows/agent-ci.yml@v0.1.0
+    # Needed so the pipeline can publish, sign and attest the image on main (POL-09).
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    with:
+      python-version: "3.13"
+      publish: ${{ github.ref == 'refs/heads/main' }}   # build, push, sign and attest only on main

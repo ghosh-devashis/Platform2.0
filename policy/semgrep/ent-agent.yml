@@ -1,0 +1,139 @@
+# Enterprise agent code rules (POL-02). Run: semgrep scan --config policy/semgrep --error <agent dir>
+# Every rule has an ID (ENT-0xx), a reason and a fix: see policy/docs/rules.md. Suppress only via waivers.yaml
+# (inline `nosem` comments are rejected by policy/tools/check_waivers.py).
+rules:
+  - id: ent-001-direct-chat-model
+    languages: [python]
+    severity: ERROR
+    message: >-
+      ENT-001: Don't construct provider chat models directly. Use get_model() from ent_agent_sdk.models (the
+      model comes from agent.yaml) so all model traffic goes through the gateway (policy/docs/rules.md#ent-001).
+    metadata: {rule-id: ENT-001}
+    pattern-either:
+      - pattern: ChatOpenAI(...)
+      - pattern: AzureChatOpenAI(...)
+      - pattern: ChatAnthropic(...)
+      - pattern: ChatBedrock(...)
+      - pattern: ChatBedrockConverse(...)
+      - pattern: ChatGoogleGenerativeAI(...)
+      - pattern: ChatVertexAI(...)
+      - pattern: ChatOllama(...)
+      - pattern: init_chat_model(...)
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**"]
+
+  - id: ent-002-raw-provider-client
+    languages: [python]
+    severity: ERROR
+    message: >-
+      ENT-002: Don't use raw provider clients (openai, anthropic, bedrock-runtime). Model calls must go through
+      get_model(...) and the gateway (policy/docs/rules.md#ent-002).
+    metadata: {rule-id: ENT-002}
+    pattern-either:
+      - pattern: OpenAI(...)
+      - pattern: AsyncOpenAI(...)
+      - pattern: openai.OpenAI(...)
+      - pattern: openai.AsyncOpenAI(...)
+      - pattern: Anthropic(...)
+      - pattern: AsyncAnthropic(...)
+      - pattern: anthropic.Anthropic(...)
+      - pattern: anthropic.AsyncAnthropic(...)
+      - pattern: $C.client("bedrock-runtime", ...)
+      - pattern: $C.client("bedrock-agent-runtime", ...)
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**"]
+
+  - id: ent-003-hardcoded-provider-url
+    languages: [python]
+    severity: ERROR
+    message: >-
+      ENT-003: Don't hard-code model provider URLs. All LLM traffic goes through the gateway
+      (policy/docs/rules.md#ent-003).
+    metadata: {rule-id: ENT-003}
+    pattern-regex: 'https?://(api\.openai\.com|api\.anthropic\.com|[a-z0-9.-]*bedrock-runtime[a-z0-9.-]*\.amazonaws\.com|generativelanguage\.googleapis\.com|[a-z0-9-]+\.openai\.azure\.com)'
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**", "**/policy/**"]
+
+  - id: ent-004-secret-from-environment
+    languages: [python]
+    severity: ERROR
+    message: >-
+      ENT-004: Don't read credentials from environment variables. Use secrets.get("<name>") from
+      ent_agent_sdk (policy/docs/rules.md#ent-004).
+    metadata: {rule-id: ENT-004}
+    patterns:
+      - pattern-either:
+          - pattern: os.environ[$KEY]
+          - pattern: os.environ.get($KEY, ...)
+          - pattern: os.getenv($KEY, ...)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: '(?i).*(api[_-]?key|secret|token|password|credential).*'
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**"]
+
+  - id: ent-005-raw-secret-access
+    languages: [python]
+    severity: ERROR
+    message: >-
+      ENT-005: Don't call Secrets Manager or SSM directly. Use secrets.get("<name>") (cached, fails closed)
+      (policy/docs/rules.md#ent-005).
+    metadata: {rule-id: ENT-005}
+    pattern-either:
+      - pattern: $C.client("secretsmanager", ...)
+      - pattern: $C.get_secret_value(...)
+      - pattern: $C.get_parameter(..., WithDecryption=True, ...)
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**", "**/devtools/**"]
+
+  - id: ent-006-own-server
+    languages: [python]
+    severity: ERROR
+    message: >-
+      ENT-006: Start the agent through EnterpriseAgentApp, not your own web server
+      (policy/docs/rules.md#ent-006).
+    metadata: {rule-id: ENT-006}
+    pattern-either:
+      - pattern: uvicorn.run(...)
+      - pattern: FastAPI(...)
+      - pattern: Flask(...)
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**", "**/harness/**"]
+
+  - id: ent-007-unregistered-tool
+    languages: [python]
+    severity: ERROR
+    message: >-
+      ENT-007: Declare tools with @tools.tool(owner=..., data_classification=...) from ent_agent_sdk, not the raw
+      LangChain @tool decorator (policy/docs/rules.md#ent-007).
+    metadata: {rule-id: ENT-007}
+    pattern-either:
+      - pattern: from langchain_core.tools import tool
+      - pattern: from langchain.tools import tool
+      - pattern: from langchain_core.tools import StructuredTool
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**"]
+
+  - id: ent-008-guardrails-disabled
+    languages: [python]
+    severity: WARNING
+    message: >-
+      ENT-008: Guardrails are disabled here. This needs an approved, unexpired waiver in waivers.yaml
+      (checked by policy/tools/check_waivers.py) (policy/docs/rules.md#ent-008).
+    metadata: {rule-id: ENT-008}
+    pattern: Guardrails.off(...)
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**"]
+
+  - id: ent-009-tool-approval-disabled
+    languages: [python]
+    severity: WARNING
+    message: >-
+      ENT-009: Tool approval is switched off here. This needs an approved, unexpired ENT-009 waiver in waivers.yaml
+      (checked by policy/tools/check_waivers.py) (policy/docs/rules.md#ent-009).
+    metadata: {rule-id: ENT-009}
+    pattern-either:
+      - pattern: $X.tool(..., requires_approval=False, ...)
+      - pattern: tool(..., requires_approval=False, ...)
+    paths:
+      exclude: ["**/ent_agent_sdk/**", "**/tests/**"]

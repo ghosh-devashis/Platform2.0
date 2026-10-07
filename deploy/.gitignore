@@ -1,0 +1,6 @@
+# Terraform working files. DO commit terraform/.terraform.lock.hcl (the reviewable provider lock).
+terraform/.terraform/
+.state/
+*.tfstate
+*.tfstate.*
+*.auto.tfvars.json

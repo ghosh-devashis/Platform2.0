@@ -1,0 +1,3 @@
+# Approved, time-boxed exceptions to platform rules (POL-11). Each needs id, rule, reason, approver, expires.
+# Expired waivers fail CI (policy/tools/check_waivers.py).
+waivers: []

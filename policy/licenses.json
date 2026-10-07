@@ -1,0 +1,6 @@
+{
+  "_comment": "Licence policy (POL-05). A dependency whose licence text matches a denied pattern fails the build unless the package is listed under exceptions (with a reason and an approved waiver).",
+  "denied_patterns": ["AGPL", "GPL-2", "GPL-3", "GNU General Public License", "SSPL", "BUSL", "Business Source", "Non-Commercial", "NonCommercial"],
+  "allowed_hint": ["MIT", "BSD", "Apache", "ISC", "PSF", "MPL", "Unlicense", "0BSD"],
+  "exceptions": []
+}

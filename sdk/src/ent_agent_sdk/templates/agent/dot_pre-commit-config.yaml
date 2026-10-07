@@ -1,0 +1,11 @@
+# Fast policy checks before every commit (the same rules CI enforces). Install: pre-commit install
+# Needs the platform repo checked out (PLATFORM_DIR, default ../Platform2.0) and a bash shell (Git Bash on Windows).
+repos:
+  - repo: local
+    hooks:
+      - id: ent-policy-fast
+        name: Enterprise policy checks (fast)
+        entry: bash -c '"${PLATFORM_DIR:-../Platform2.0}/policy/run-checks.sh" --fast'
+        language: system
+        pass_filenames: false
+        always_run: true

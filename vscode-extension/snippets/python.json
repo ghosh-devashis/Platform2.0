@@ -1,0 +1,52 @@
+{
+  "Enterprise: LangGraph node": {
+    "prefix": "ent-node",
+    "description": "A LangGraph node function over MessagesState",
+    "body": [
+      "def ${1:my_node}(state: MessagesState) -> dict:",
+      "    \"\"\"${2:What this node does.}\"\"\"",
+      "    ${3:reply} = get_model().invoke(state[\"messages\"])",
+      "    return {\"messages\": [${3:reply}]}"
+    ]
+  },
+  "Enterprise: tool": {
+    "prefix": "ent-tool",
+    "description": "Register a read-only tool with the SDK (also list it under tools: in agent.yaml)",
+    "body": [
+      "@tools.tool(owner=\"${1:team}\", data_classification=\"${2|public,internal,confidential,restricted|}\")",
+      "def ${3:tool_name}(${4:arg}: str) -> str:",
+      "    \"\"\"${5:What the model should know about this tool.}\"\"\"",
+      "    ${0:return ${4:arg}}"
+    ]
+  },
+  "Enterprise: side-effect tool": {
+    "prefix": "ent-tool-sideeffect",
+    "description": "Tool that changes state (audited, never retried automatically)",
+    "body": [
+      "@tools.tool(owner=\"${1:team}\", data_classification=\"${2|public,internal,confidential,restricted|}\", side_effects=True)",
+      "def ${3:tool_name}(${4:arg}: str) -> str:",
+      "    \"\"\"${5:What this tool changes.}\"\"\"",
+      "    ${0:return ${4:arg}}"
+    ]
+  },
+  "Enterprise: fetch a secret": {
+    "prefix": "ent-secret",
+    "description": "Read a secret with secrets.get (also list it under secrets: in agent.yaml)",
+    "body": ["${1:api_key} = secrets.get(\"${2:crm/api}\")"]
+  },
+  "Enterprise: get a model": {
+    "prefix": "ent-model",
+    "description": "Get the model listed in agent.yaml (no name in code)",
+    "body": ["${1:model} = get_model()"]
+  },
+  "Enterprise: app from manifest": {
+    "prefix": "ent-app",
+    "description": "Serve the graph through EnterpriseAgentApp",
+    "body": [
+      "app = EnterpriseAgentApp.from_manifest(${1:graph}, \"agent.yaml\")",
+      "",
+      "if __name__ == \"__main__\":",
+      "    app.run()"
+    ]
+  }
+}

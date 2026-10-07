@@ -1,0 +1,338 @@
+PLATFORM 2.0 - LOCAL SETUP INSTRUCTIONS
+=======================================
+Last checked: 2026-10-07 (Windows 11, AMD64, Docker Desktop)
+
+WHAT YOU GET
+  A copy of the Platform 2.0 local stack on your own computer, so you can build, run and test AI agents that follow
+  the enterprise standards without needing an AWS account:
+    - in Docker: Floci (a local look-alike of AWS), Floci UI, Portkey (the LLM gateway), Jaeger (trace viewer),
+      the model router and the invoke router
+    - the Enterprise Agent SDK (Python) and the `ent-agent` command
+    - policy rules, a VS Code extension, a TypeScript SDK and a Terraform deployment rehearsal (the last three optional)
+  Agents are NOT kept in this repository. You create each agent in its own folder next to it (section 7).
+
+  Honest note: everything below was run on Windows. harness/dev.sh (macOS/Linux) and Apple Silicon are supported by
+  design (CI builds amd64 and arm64 images) but have not been run by the author. If something differs, tell the
+  platform team.
+
+CONTENTS
+   1. What you need installed
+   2. Get the code
+   3. Settings to check or change for YOUR machine   <- read this before step 4
+   4. Start the local stack
+   5. Add your provider keys (only for "real" mode)
+   6. Check that model routing works
+   7. Create and test your first agent
+   8. VS Code extension (optional)
+   9. Optional extras
+  10. Stop, reset, clean up
+  11. Troubleshooting
+  12. Where to read more
+
+
+1. WHAT YOU NEED INSTALLED
+--------------------------
+  Tool                  Needed for                       Version (tested)            Notes
+  Git                   getting the code                 any recent
+  Docker Desktop        the whole local stack            Engine 29                   Windows: use the WSL 2 backend and keep Docker
+                                                                                      Desktop OPEN while you work. Give it at least
+                                                                                      8 GB RAM (16 GB is comfortable). The images use
+                                                                                      about 1.5 GB of disk.
+  uv                    Python environment, packages     0.11                        https://docs.astral.sh/uv/  (uv can download
+                                                                                      Python itself)
+  Python                SDK and routers                  3.11 or newer (3.13)
+  PowerShell            the *.ps1 scripts (Windows)      5.1 or 7
+  AWS CLI v2            look inside Floci, store keys    2.x                         optional but used below
+  VS Code               the extension                    1.137 or newer              optional
+  Node.js               build the extension, TS SDK      22 or newer (24)            optional
+  Terraform             deployment rehearsal             1.6 or newer (1.16)         optional
+  semgrep, conftest,    the full policy bundle           latest                      optional (policy/run-checks.ps1 skips missing
+  gitleaks                                                                           tools with -Fast and fails without it)
+
+  Windows only: if PowerShell refuses to run the scripts ("running scripts is disabled"), run this once:
+      Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+  or run a single script with:  powershell -ExecutionPolicy Bypass -File .\harness\dev.ps1 status
+
+
+2. GET THE CODE
+---------------
+  The repository is private: ask the owner to add you, and sign in to GitHub when Git asks.
+
+      git clone https://github.com/ghosh-devashis/Platform2.0.git
+      cd Platform2.0
+      uv sync            # installs the SDK, both routers and pytest into .venv (downloads packages the first time)
+
+  Keep your agents NEXT TO the platform folder, not inside it:
+
+      work\
+        Platform2.0\     <- this repository
+        my-agent\        <- an agent you create (section 7)
+
+
+3. SETTINGS TO CHECK OR CHANGE FOR YOUR MACHINE
+-----------------------------------------------
+  3.1  PORTS. These must be free on your computer. The number LEFT of the colon in compose.yaml "ports:" is the one
+       on your computer; change only that one if a port is taken, then update everything that uses it.
+
+         Port    What                      Defined in      Also used by
+         4566    Floci (local AWS)         compose.yaml    AWS_ENDPOINT_URL for host tools; the `floci` AWS CLI profile
+         4500    Floci UI (web console)    compose.yaml
+         8787    Portkey gateway           compose.yaml
+         16686   Jaeger trace viewer       compose.yaml    -Jaeger option of harness\call-agent.ps1 and routing-demo.ps1
+         4318    Jaeger OTLP receiver      compose.yaml    OTEL_EXPORTER_OTLP_ENDPOINT of every agent you run on the host
+         8788    model router              compose.yaml    ENT_MODEL_GATEWAY_URL of agents; VS Code ent.runtime.modelRouterUrl
+         4567    invoke router             compose.yaml    VS Code ent.runtime.invokeRouterUrl
+         8080    an agent's default port   (environment)   set PORT to run several agents side by side (8091, 8092, ...)
+
+  3.2  ROUTER MODE (how model calls are answered). Chosen when you start the stack:  .\harness\dev.ps1 up -Mode <mode>
+         replay   no keys, no cost: answers come from recordings, or a clearly marked "[replay stub]". Good first run.
+         real     real OpenAI/Anthropic calls (small cost). Needs your keys (section 5).
+         record   like real, and saves each answer under harness\model-router\recordings for later replay.
+         local    a local model such as Ollama (not part of this setup).
+
+  3.3  WHICH REAL MODELS ANSWER. harness\model-router\registry.json maps the approved names agents use ("chat-default",
+       "chat-fast") to real provider models. Check the "model" values (for example claude-opus-5-5, claude-haiku-4-5 and
+       the OpenAI fallback) are models YOUR accounts can use, and change them if not. Keep the logical names: agents,
+       the policy rules and policy\data\approved-models.json all use them. After editing, rebuild the router:
+         .\harness\dev.ps1 up -Mode real
+
+  3.4  ROUTER KEYS FOR YOUR AGENTS. Every agent presents its own key to the model router. The router accepts only the keys
+       in ROUTER_GATEWAY_KEYS (compose.yaml). The default list is just:  platform-tests=dev-key-platform-tests
+       To add your agent, set the variable in the SAME PowerShell window BEFORE you start the stack, then give the agent
+       the matching key as ENT_MODEL_GATEWAY_KEY (section 7):
+         $env:ROUTER_GATEWAY_KEYS = "platform-tests=dev-key-platform-tests,my-agent=dev-key-my-agent"
+         .\harness\dev.ps1 up -Mode replay
+       These "dev-key-..." values are for your own computer only. Use different, secret values anywhere shared.
+
+  3.5  WHERE THE SDK IS, for each agent. The SDK is not on a package index yet, so every agent's pyproject.toml needs
+       the line shown in section 7 (path = "../Platform2.0/sdk"). Change that path if your folders are laid out differently.
+       The agent template's compose.yaml also reads PLATFORM_DIR (default ../Platform2.0):
+         $env:PLATFORM_DIR = "C:\work\Platform2.0"
+
+  3.6  AGENTS THAT SHOULD ANSWER InvokeAgentRuntime CALLS (optional). The invoke router forwards AgentCore invoke calls to
+       agent containers. Tell it where yours is, before "up":
+         $env:INVOKE_ROUTER_AGENTS = "my_agent=http://host.docker.internal:8091"
+       (runtime names use underscores; "my-agent" becomes "my_agent")
+
+  3.7  AWS CLI PROFILE FOR FLOCI (one time). Do NOT run plain "aws configure": it would overwrite your default profile,
+       which may hold real AWS keys. Create a separate profile with dummy credentials:
+         aws configure set aws_access_key_id test --profile floci
+         aws configure set aws_secret_access_key test --profile floci
+         aws configure set region us-east-1 --profile floci
+         aws configure set endpoint_url http://localhost:4566 --profile floci
+       From then on, "aws --profile floci ..." talks to Floci and never to real AWS. Without the profile, set
+       AWS_ENDPOINT_URL=http://localhost:4566 AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1.
+
+  3.8  GITHUB PLACEHOLDERS (only when you set up CI). Replace "your-org" with your GitHub owner and pin a release tag in:
+         .github\workflows\agent-ci.yml  (the default of the "platform-repository" input, "your-org/platform2.0";
+                                          "platform-ref" is the release tag, default v0.1.0)
+         sdk\src\ent_agent_sdk\templates\agent\dot_github\workflows\ci.yml  (the "uses:" line; copied into every new agent)
+       Tag a release in your copy of this repository first (for example v0.1.0) and use that tag, never a branch.
+
+  3.9  VS CODE SETTINGS (only if you use the extension, section 8): ent.platformDir, ent.runtime.agentUrls,
+       ent.runtime.mode.
+
+  3.10 harness\env.ps1 (Windows, optional). It adds a portable Node.js and Terraform from %LOCALAPPDATA%\Programs to PATH
+       for one PowerShell window. If you installed Node and Terraform normally they are already on PATH: skip it.
+
+  3.11 GIT IDENTITY, if Git has never been used on this computer:
+         git config --global user.name "Your Name"
+         git config --global user.email "you@example.com"
+
+
+4. START THE LOCAL STACK
+------------------------
+  Docker Desktop must be running. From the Platform2.0 folder:
+
+    Windows:        .\harness\dev.ps1 up -Mode replay
+    macOS / Linux:  ./harness/dev.sh up replay        (if "permission denied": chmod +x harness/dev.sh)
+
+  The first start downloads images and builds the two routers from this repository: allow several minutes. Then:
+
+      .\harness\dev.ps1 status
+
+  should list six containers, all Up: floci, floci-ui, portkey, jaeger, model-router, invoke-router.
+
+      Floci (local AWS)      http://localhost:4566/_floci/health
+      Floci UI               http://localhost:4500
+      Portkey console        http://localhost:8787/public/
+      Jaeger (traces)        http://localhost:16686
+      Model router           http://localhost:8788/health      (shows the mode: replay, real, ...)
+      Invoke router          http://localhost:4567
+
+  There are no agents in this stack. That is expected: you add your own in section 7.
+
+
+5. ADD YOUR PROVIDER KEYS (ONLY FOR "REAL" MODE)
+------------------------------------------------
+  Skip this section while you use replay mode. In real mode the model router reads your keys from Floci's Secrets
+  Manager, under the names llm/anthropic and llm/openai (the value is just the key). Keys never go in a file, in
+  Git, in agent code or into a chat window. Type them hidden, as below.
+
+  Windows (PowerShell). Run it once per key, changing $name:
+      $name = "llm/anthropic"            # then run again with "llm/openai"
+      $secure = Read-Host -AsSecureString "API key for $name (input is hidden)"
+      $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+      $file = New-TemporaryFile
+      [IO.File]::WriteAllText($file.FullName, $plain, (New-Object Text.UTF8Encoding($false)))
+      aws --profile floci secretsmanager create-secret --name $name --secret-string "file://$($file.FullName)"
+      Remove-Item $file.FullName -Force ; $plain = $null
+    (If the secret already exists, use "put-secret-value --secret-id $name" instead of "create-secret --name $name".)
+
+  macOS / Linux:
+      read -rs -p "API key (hidden): " KEY ; echo
+      aws --profile floci secretsmanager create-secret --name llm/anthropic --secret-string "$KEY" ; unset KEY
+
+  Then switch the router to real mode:   .\harness\dev.ps1 up -Mode real
+  Real calls cost money, so keep an eye on usage. Rotate a key at once if it ever appears anywhere it should not.
+  Floci stores its data in a Docker volume (compose.yaml: FLOCI_STORAGE_MODE=persistent, volume "floci-data"), so your
+  keys survive a restart of Docker Desktop, a computer reboot and "dev.ps1 down" + "up" (tested). Only
+  ".\harness\dev.ps1 down -Wipe" deletes them. If you ever run a stack started from an OLDER copy of compose.yaml,
+  Floci was memory-only and lost everything on restart: update compose.yaml and enter the keys once more.
+
+
+6. CHECK THAT MODEL ROUTING WORKS
+---------------------------------
+      .\harness\routing-demo.ps1                (real mode: seven cases, each prints PASS or FAIL)
+      .\harness\routing-demo.ps1 -SkipModelCalls  (only the free cases)
+
+  It shows: the approved model names, an unapproved model refused (400), a wrong key refused (401), two logical names
+  answered by different real models, the gateway guardrail blocking a fake AWS key, a cache miss then hit, and the trace
+  recording which real model answered. In replay mode the cases that need a real provider are skipped.
+
+
+7. CREATE AND TEST YOUR FIRST AGENT
+-----------------------------------
+  From the Platform2.0 folder:
+
+      uv run ent-agent new my-agent --team my-team --classification internal --dir ..
+      cd ..\my-agent
+
+  Open my-agent\pyproject.toml and add these lines at the END (the SDK is not on a package index yet):
+
+      [tool.uv.sources]
+      ent-agent-sdk = { path = "../Platform2.0/sdk", editable = true }
+
+  Then, still in my-agent:
+
+      uv sync                               # installs the SDK and LangGraph/LangChain at the approved versions
+      uv run ent-agent manifest validate    # is agent.yaml well formed?
+      uv run ent-agent check .              # the platform rules (the same ones CI and the editor apply)
+      uv run pytest                         # the generated test uses a scripted fake model: no keys needed
+
+  Which model the agent uses is chosen ONLY in agent.yaml: the first entry under "models:" (chat-default or chat-fast).
+  agent.py calls get_model() with no name. To change the model, edit agent.yaml, not the code.
+
+  Run it against the local stack (a second PowerShell window, from my-agent):
+
+      $env:PORT = '8091'                                      # 8080 is the default
+      $env:ENT_MODEL_GATEWAY_KEY = 'dev-key-platform-tests'   # or your own key from step 3.4
+      $env:OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318'
+      uv run my-agent
+
+  (Environment variables last only for that window.) Call it from any window:
+
+      Invoke-RestMethod http://localhost:8091/ping
+      Invoke-RestMethod -Method Post -Uri http://localhost:8091/invocations -ContentType 'application/json' -Body '{"prompt":"Say hello"}'
+
+  See the call as a trace (from the Platform2.0 folder): prints the answer, a Jaeger link and the call tree.
+
+      .\harness\call-agent.ps1 -Port 8091 -Prompt "Say hello"
+
+  Optional: create the secrets, tables and AgentCore runtime your agent.yaml declares inside Floci:
+
+      .\harness\dev.ps1 seed -Manifest ..\my-agent\agent.yaml
+
+  Not working? Section 11.
+
+
+8. VS CODE EXTENSION (OPTIONAL)
+-------------------------------
+  Live rule checks with one-click fixes, snippets, stack health in the status bar and an invoke-and-test panel.
+  Needs Node.js (section 1). From the Platform2.0 folder:
+
+      cd vscode-extension
+      npm install
+      npm run package
+      code --install-extension dist\enterprise-agent-toolkit-0.1.0.vsix
+
+  Then open YOUR AGENT folder in VS Code and add to its settings (Settings JSON):
+
+      {
+        "ent.platformDir": "C:\\work\\Platform2.0",          <- YOUR path to this repository
+        "ent.runtime.agentUrls": ["http://localhost:8091"],  <- the port your agent uses
+        "ent.runtime.mode": "real"                           <- the mode your stack runs in (see below)
+      }
+
+  Why the mode matters: the command "Enterprise Agent: Start Local Stack" runs  dev.ps1 up -Mode <ent.runtime.mode>.
+  The default is replay, which would switch a real-mode router to replay.
+  If the extension cannot start "ent-agent", it falls back to "uv run ent-agent" in the agent folder.
+
+
+9. OPTIONAL EXTRAS
+------------------
+  - Full policy bundle: install semgrep, conftest and gitleaks, then   .\policy\run-checks.ps1 -Target ..\my-agent
+    (macOS/Linux: bash policy/run-checks.sh ../my-agent). Add -Fast to skip tools you have not installed.
+  - TypeScript SDK:   cd sdk-ts ; npm install ; npm test
+  - Deployment rehearsal with Terraform against Floci: see deploy\README.md  (the first run downloads a large provider).
+  - Evaluation gate for an agent:   uv run ent-agent eval run evals/golden.yaml --url http://localhost:8091
+  - Docker-socket mode (compose.docker-socket.yaml) lets Floci start Lambda/RDS containers and its own UI, but gives that
+    container control of your Docker. Leave it off unless you know you need it.
+  - Pre-commit: in an agent folder,  pre-commit install  runs the fast policy checks before each commit.
+
+
+10. STOP, RESET, CLEAN UP
+-------------------------
+      .\harness\dev.ps1 down            stop the stack, keep Floci's data (secrets, in the "floci-data" Docker volume)
+      .\harness\dev.ps1 down -Wipe      stop it and delete Floci's data (including stored provider keys)
+  "ent-agent dev seed" (or dev.ps1 seed) re-creates what an agent's agent.yaml declares.
+  Traces in Jaeger are kept in memory and are lost when it restarts.
+
+
+11. TROUBLESHOOTING
+-------------------
+  "docker: ... cannot find the file specified" / dev.ps1 fails at once
+        Docker Desktop is not running. Open it and wait for "Engine running".
+  "port is already allocated" or "address already in use"
+        Something else uses that port. Stop it, or change the left number in compose.yaml (section 3.1).
+  uv sync in an agent: "ent-agent-sdk was not found in the package registry"
+        The [tool.uv.sources] lines are missing or the path is wrong (section 7).
+  The router answers 401 invalid_api_key
+        The agent's ENT_MODEL_GATEWAY_KEY is not in ROUTER_GATEWAY_KEYS. Set the variable and run "up" again (section 3.4).
+  Answers say "[replay stub]"
+        The router is in replay mode and has no recording for that prompt. Use -Mode real (keys needed) or -Mode record.
+  Answers fail with 503 "provider credentials unavailable"
+        Real mode and the keys are not stored yet (section 5), or you ran "down -Wipe", or this stack started from an
+        older compose.yaml in which Floci kept everything in memory. Enter the keys again.
+  No traces in Jaeger
+        OTEL_EXPORTER_OTLP_ENDPOINT was not set in the window that started the agent, or Jaeger is not running.
+  Settings "stop working" in a new window
+        $env: settings last only for the window where you set them.
+  The agent says 503 Unhealthy on /ping
+        The agent cannot reach the model router. Check "dev.ps1 status", or set ENT_HEALTH_CHECK_GATEWAY=false to skip the check.
+  Changing models: in agent.yaml has no effect (older agents)
+        An agent generated before 2026-10-07 still names the model in agent.py. Change get_model("chat-default") to
+        get_model(), after running   uv sync --reinstall-package ent-agent-sdk   in that agent.
+  A change to the SDK does not show up in an agent
+        Add "editable = true" to the ent-agent-sdk source line (section 7), or run uv sync --reinstall-package ent-agent-sdk.
+  "uv: VIRTUAL_ENV ... does not match the project environment" (Anaconda users)
+        Harmless. Silence it with   $env:VIRTUAL_ENV = $null
+  harness/dev.sh: "permission denied" on macOS/Linux
+        chmod +x harness/dev.sh
+  "host.docker.internal" does not resolve on Linux
+        Add  extra_hosts: ["host.docker.internal:host-gateway"]  to the invoke-router service in compose.yaml.
+
+
+12. WHERE TO READ MORE
+----------------------
+  docs\onboarding.md                  the one-page developer path
+  docs\floci-setup.md                 Floci, Docker and the AWS profile in more detail
+  docs\platform-guide.md              diagrams: architecture, a new agent's journey, one request end to end
+  docs\requirements-spec.md           what the platform must do
+  docs\requirements-traceability.md   what is built, where in the code, what is missing
+  sdk\README.md                       the SDK, with examples
+  policy\docs\rules.md                every ENT-nnn rule: why it exists and how to fix it  (uv run ent-agent rules ENT-001)
+  harness\model-router\README.md      how the model router works and its settings
+  deploy\README.md                    Terraform deployment and rehearsal
+  docs\support.md                     who to ask
+  CHANGELOG.md                        what changed in each release

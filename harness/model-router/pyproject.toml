@@ -1,0 +1,20 @@
+[project]
+name = "model-router"
+version = "0.1.0"
+description = "Local model router: approved model registry + provider keys (from Secrets Manager) in front of the open-source Portkey gateway."
+requires-python = ">=3.11"
+# Reuses the SDK (secrets, logging); httpx2 is the HTTP client the approved openai client already uses.
+dependencies = ["ent-agent-sdk", "httpx2~=2.13.1"]
+
+[project.scripts]
+model-router = "model_router.__main__:main"
+
+[tool.uv.sources]
+ent-agent-sdk = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/model_router"]

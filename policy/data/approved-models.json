@@ -1,0 +1,5 @@
+{
+  "_comment": "Logical model names agents may list in agent.yaml. Keep in step with harness/model-router/registry.json (a test checks this).",
+  "approved_models": ["chat-default", "chat-fast"],
+  "restricted_models": ["chat-default"]
+}

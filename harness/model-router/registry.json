@@ -1,0 +1,55 @@
+{
+  "_comment": "Approved model registry (SDK-07, GW-03). Agents request a logical name; the router turns it into a Portkey config. Provider keys come from Secrets Manager (key_secret), never from agents. 'local' is used in ROUTER_MODE=local (a model served on the developer's machine, e.g. Ollama). Changing a target here needs no agent change.",
+  "guardrail_profiles": {
+    "_comment": "Gateway guardrails (layer 1, GW-05), applied by Portkey itself via before/after request hooks. 'standard' blocks credentials in prompts and answers; 'strict' also blocks personal data. The agent's profile arrives in the x-ent-guardrail-profile header (the SDK sets it from the manifest). Regexes are checked with Portkey's built-in default.regexMatch: 'not': true means the check passes when the pattern is absent.",
+    "standard": {
+      "before_request_hooks": [
+        {"type": "guardrail", "id": "ent-input-no-secrets", "deny": true, "async": false,
+         "checks": [{"id": "default.regexMatch", "parameters": {"rule": "AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----", "not": true}}]}
+      ],
+      "after_request_hooks": [
+        {"type": "guardrail", "id": "ent-output-no-secrets", "deny": true, "async": false,
+         "checks": [{"id": "default.regexMatch", "parameters": {"rule": "AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----", "not": true}}]}
+      ]
+    },
+    "strict": {
+      "before_request_hooks": [
+        {"type": "guardrail", "id": "ent-input-no-secrets", "deny": true, "async": false,
+         "checks": [{"id": "default.regexMatch", "parameters": {"rule": "AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----", "not": true}}]},
+        {"type": "guardrail", "id": "ent-input-no-pii", "deny": true, "async": false,
+         "checks": [{"id": "default.regexMatch", "parameters": {"rule": "\\b\\d{3}-\\d{2}-\\d{4}\\b|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "not": true}}]}
+      ],
+      "after_request_hooks": [
+        {"type": "guardrail", "id": "ent-output-no-secrets", "deny": true, "async": false,
+         "checks": [{"id": "default.regexMatch", "parameters": {"rule": "AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----", "not": true}}]},
+        {"type": "guardrail", "id": "ent-output-no-pii", "deny": true, "async": false,
+         "checks": [{"id": "default.regexMatch", "parameters": {"rule": "\\b\\d{3}-\\d{2}-\\d{4}\\b|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", "not": true}}]}
+      ]
+    }
+  },  "models": {
+    "chat-default": {
+      "description": "General-purpose chat and tool use. Claude Opus 5.5, falling back to OpenAI.",
+      "strategy": "fallback",
+      "targets": [
+        {"provider": "anthropic", "model": "claude-opus-5-5", "key_secret": "llm/anthropic"},
+        {"provider": "openai", "model": "gpt-5.6-sol", "key_secret": "llm/openai", "params": {"reasoning_effort": "none"}}
+      ],
+      "local": {"model": "llama3.1", "custom_host": "http://host.docker.internal:11434"},
+      "retry": {"attempts": 2, "on_status_codes": [429, 500, 502, 503, 504]},
+      "default_max_completion_tokens": 4096,
+      "request_timeout_ms": 120000
+    },
+    "chat-fast": {
+      "description": "Quick, low-cost tasks (classification, extraction, routing).",
+      "strategy": "single",
+      "targets": [
+        {"provider": "anthropic", "model": "claude-haiku-4-5", "key_secret": "llm/anthropic"}
+      ],
+      "local": {"model": "llama3.2", "custom_host": "http://host.docker.internal:11434"},
+      "retry": {"attempts": 2, "on_status_codes": [429, 500, 502, 503, 504]},
+      "default_max_completion_tokens": 2048,
+      "request_timeout_ms": 60000,
+      "cache": {"ttl_seconds": 300, "classifications": ["public", "internal"]}
+    }
+  }
+}

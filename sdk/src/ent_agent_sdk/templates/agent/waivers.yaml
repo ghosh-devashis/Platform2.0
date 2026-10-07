@@ -1,0 +1,8 @@
+# Approved, time-boxed exceptions to platform rules. Every waiver needs all five fields; expired waivers fail CI.
+# Example:
+#   - id: WAIVER-2026-014
+#     rule: ENT-001
+#     reason: Evaluating a model that is not in the registry yet.
+#     approver: jane.doe@example.com
+#     expires: 2026-12-31
+waivers: []

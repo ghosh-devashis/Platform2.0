@@ -1,0 +1,7 @@
+# Example values (deploy.ps1 generates these from agent.yaml; you rarely write this by hand).
+target              = "local"
+agent_name          = "rehearsal-agent"
+team                = "platform"
+data_classification = "internal"
+image_uri           = "local/rehearsal-agent:dev"
+secrets             = ["rehearsal/demo"]

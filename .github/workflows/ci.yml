@@ -1,0 +1,86 @@
+# CI for the platform repo itself: SDK, harness, policy tools and examples on every OS and CPU we support (RUN-08),
+# the local images on amd64 and arm64, and the governance checks (compatibility matrix, performance targets).
+name: Platform CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Tests (the Floci/Jaeger integration tests skip themselves when those aren't running)
+        run: uv run pytest
+      - name: A freshly generated agent passes the manifest and rules checks
+        shell: bash
+        run: |
+          uv run ent-agent new ci-probe --team platform --dir "$RUNNER_TEMP"
+          uv run ent-agent manifest validate "$RUNNER_TEMP/ci-probe/agent.yaml"
+          uv run ent-agent check "$RUNNER_TEMP/ci-probe"
+          uv run python policy/tools/check_waivers.py --root "$RUNNER_TEMP/ci-probe"
+
+  images:
+    name: Images (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]  # amd64 and arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the router images
+        run: docker compose --profile app build
+
+  governance:
+    name: Governance and performance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Compatibility matrix is current
+        run: uv run python scripts/gen_compat_matrix.py --check
+      - name: Rules page is generated from the catalogue
+        run: |
+          uv run ent-agent rules --markdown > /tmp/rules.md
+          diff -u policy/docs/rules.md /tmp/rules.md
+      - name: Supported versions
+        run: uv run python policy/tools/check_versions.py --root .
+      - name: SDK overhead and policy-check speed meet the targets (NFR-01)
+        run: uv run python scripts/bench_overhead.py --requests 200 --check
+
+  extension-and-ts-sdk:
+    name: VS Code extension and TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: uv sync --frozen
+      - name: VS Code extension
+        working-directory: vscode-extension
+        run: |
+          npm ci
+          npm test
+          npm run package
+      - name: TypeScript SDK
+        working-directory: sdk-ts
+        run: |
+          npm ci
+          npm run build
+          npm test

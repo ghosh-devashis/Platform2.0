@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ent-agent-standards": {
+      "command": "uv",
+      "args": ["run", "ent-agent", "mcp"]
+    }
+  }
+}

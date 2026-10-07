@@ -1,0 +1,8 @@
+**
+!out/*.js
+!out/core/*.js
+!snippets/**
+!resources/**
+!package.json
+!README.md
+!CHANGELOG.md
