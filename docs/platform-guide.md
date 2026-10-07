@@ -1,8 +1,8 @@
 # Platform 2.0 guide: how it fits together
 
 A learning guide for people new to the platform. It explains the moving parts with diagrams. The detail (every requirement,
-every function, every endpoint, every config file) is in the workbook
-[platform-learning-workbook.xlsx](platform-learning-workbook.xlsx); each section below names the sheet to open next.
+every function, every endpoint, every config file) is in the author's learning workbook (an Excel file that is not part of
+this repository; `docs/requirements-traceability.md` and the code hold the same facts); each section below names the sheet it comes from.
 
 > **Viewing the diagrams.** The diagrams are Mermaid. They render in GitHub and in VS Code's Markdown preview (install
 > the "Markdown Preview Mermaid Support" extension if you only see code). Section 1 also has a plain-text version.
